@@ -89,12 +89,11 @@ export class AerospaceRcaClient {
     return firstRow[firstColumn.name] ?? null;
   }
 
-  /** Health check via the SDK's system client. */
+  /** Health check via a lightweight SQL ping. */
   async health(): Promise<{ ok: boolean; version?: string }> {
     try {
-      const status = await this.sdk.system.status();
-      const v = (status as { version?: string } | undefined)?.version;
-      return { ok: true, version: v };
+      await this.sql('SELECT 1');
+      return { ok: true };
     } catch {
       return { ok: false };
     }
@@ -116,7 +115,9 @@ function shapeResult<Row>(raw: {
   const rows = (raw.rows ?? []).map((tuple) => {
     const obj: Record<string, unknown> = {};
     for (let i = 0; i < columns.length; i++) {
-      obj[columns[i].name] = tuple[i];
+      const col = columns[i];
+      if (!col) continue;
+      obj[col.name] = tuple[i];
     }
     return obj as Row;
   });

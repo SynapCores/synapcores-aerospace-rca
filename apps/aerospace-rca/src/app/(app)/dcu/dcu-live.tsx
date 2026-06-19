@@ -384,7 +384,7 @@ export function DcuLive() {
             <CardTitle className="text-base">Alert feed</CardTitle>
           </CardHeader>
           <CardContent>
-            <AlertFeed alerts={alerts} />
+            <AlertFeed alerts={alerts} onOpenInvestigation={stopTest} />
           </CardContent>
         </Card>
       </div>
@@ -456,7 +456,13 @@ function SparkPanel({ channel }: { channel: Channel }) {
   );
 }
 
-function AlertFeed({ alerts }: { alerts: FeedAlert[] }) {
+function AlertFeed({
+  alerts,
+  onOpenInvestigation,
+}: {
+  alerts: FeedAlert[];
+  onOpenInvestigation?: () => void;
+}) {
   if (alerts.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
@@ -503,7 +509,7 @@ function AlertFeed({ alerts }: { alerts: FeedAlert[] }) {
               <div className="mt-2">
                 <Link
                   href={`/anomalies/${a.anomaly_id}`}
-                  onClick={stopTest}
+                  onClick={onOpenInvestigation}
                   className="inline-block rounded bg-primary text-primary-foreground px-2 py-0.5 text-[11px] font-semibold hover:opacity-90"
                 >
                   Open Investigation →
