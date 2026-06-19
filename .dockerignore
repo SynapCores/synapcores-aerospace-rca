@@ -1,0 +1,11 @@
+# Root build context (used by apps/aerospace-rca/Dockerfile).
+.git
+**/node_modules
+**/.next
+**/dist
+**/*.tsbuildinfo
+# never bake secrets into an image
+**/.env
+**/.env.local
+**/.env.*.local
+**/*.bak-*

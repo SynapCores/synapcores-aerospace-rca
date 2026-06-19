@@ -1,0 +1,59 @@
+# Aerospace-RCA demo — one-command bundle.
+#
+#   cp .env.example .env      # then edit the two secrets
+#   docker compose up --build
+#   open http://localhost:3005/demo
+#
+# Three services:
+#   engine  — SynapCores AIDB community image (vector + graph + audit + agents)
+#   bridge  — DCU telemetry-bridge (detection → AIDB)
+#   app     — the Next.js demo UI
+#
+# Auth model: the engine mints an admin token on boot (signed with
+# AIDB_JWT_SECRET) for the admin user, whose password we pin via
+# AIDB_ADMIN_PASSWORD. The app + bridge log in with that password at
+# startup (POST /v1/auth/login) to obtain the token — see each service's
+# bin/aidb-login.mjs. No token is baked into any image.
+
+name: aerospace-rca
+
+services:
+  engine:
+    image: synapcores/community:latest
+    environment:
+      - AIDB_ACCEPT_LICENSE=1
+      - AIDB_JWT_SECRET=${AIDB_JWT_SECRET:?set AIDB_JWT_SECRET in .env}
+      - AIDB_ADMIN_PASSWORD=${AIDB_ADMIN_PASSWORD:?set AIDB_ADMIN_PASSWORD in .env}
+    ports:
+      - "8080:8080"   # the community image listens on 8080 inside the container
+    volumes:
+      - aidb_data:/opt/synapcores/aidb_data   # persist demo data across `down`
+
+  bridge:
+    build:
+      context: ./apps/telemetry-bridge
+    depends_on:
+      - engine          # start order only; aidb-login.mjs retries until ready
+    environment:
+      - SYNAPCORES_URL=http://engine:8080
+      - AIDB_ADMIN_PASSWORD=${AIDB_ADMIN_PASSWORD}
+      - DCU_BRIDGE_PORT=4005
+      - DCU_AGGREGATE_PERIOD_MS=${DCU_AGGREGATE_PERIOD_MS:-5000}
+      - BRIDGE_SOURCE=${BRIDGE_SOURCE:-mock}
+    ports:
+      - "4005:4005"     # browser connects here (ws://<host>:4005)
+
+  app:
+    build:
+      context: .
+      dockerfile: apps/aerospace-rca/Dockerfile
+    depends_on:
+      - engine          # start order only; entrypoint retries login + seeds
+    environment:
+      - SYNAPCORES_URL=http://engine:8080
+      - AIDB_ADMIN_PASSWORD=${AIDB_ADMIN_PASSWORD}
+    ports:
+      - "3005:3005"
+
+volumes:
+  aidb_data:

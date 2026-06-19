@@ -104,8 +104,32 @@ function startCosmosSource(): CosmosAdapter {
   });
 }
 
+/** Load the sensor registry, waiting for the app to apply the schema and
+ *  seed telemetry_sensors. The app + bridge start in parallel (both only
+ *  depend on the engine), so on a cold `docker compose up` the bridge can
+ *  outrun the seed — retry until the table exists and is non-empty. */
+async function loadRegistryWithRetry(): Promise<number> {
+  const RETRIES = Number(process.env.BRIDGE_REGISTRY_RETRIES ?? 90);
+  const DELAY_MS = Number(process.env.BRIDGE_REGISTRY_RETRY_MS ?? 2000);
+  for (let attempt = 1; attempt <= RETRIES; attempt++) {
+    try {
+      const n = await bridge.loadRegistry();
+      if (n > 0) return n;
+      console.log(
+        `[telemetry-bridge] registry empty (attempt ${attempt}/${RETRIES}) — waiting for seed…`,
+      );
+    } catch (e) {
+      console.log(
+        `[telemetry-bridge] registry not ready (attempt ${attempt}/${RETRIES}): ${(e as Error).message.slice(0, 120)}`,
+      );
+    }
+    await new Promise((r) => setTimeout(r, DELAY_MS));
+  }
+  throw new Error('telemetry_sensors never became available — is the app seeding?');
+}
+
 async function main(): Promise<void> {
-  const n = await bridge.loadRegistry();
+  const n = await loadRegistryWithRetry();
   bridge.start();
   console.log(`[telemetry-bridge] loaded ${n} sensors from telemetry_sensors`);
 

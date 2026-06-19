@@ -27,6 +27,40 @@ The two apps connect through SynapCores AIDB — the only shared state.
 
 ---
 
+## Run it with Docker (one command)
+
+The fastest path — engine + bridge + app, fully wired:
+
+```sh
+git clone git@github.com:SynapCores/synapcores-aerospace-rca.git
+cd synapcores-aerospace-rca
+
+cp .env.example .env
+# edit .env: set AIDB_JWT_SECRET (e.g. `openssl rand -base64 32`)
+#            and AIDB_ADMIN_PASSWORD
+
+docker compose up --build
+```
+
+First run pulls the engine image, builds the app + bridge, applies the
+schema, and seeds the corpus — give it a few minutes. Then open:
+
+- **http://localhost:3005/demo** — 5-act cinematic playback
+- **http://localhost:3005/dcu** — live telemetry detection
+
+**How auth is wired:** the engine mints an admin token on boot (signed
+with `AIDB_JWT_SECRET`) for the `admin` user, whose password you pin via
+`AIDB_ADMIN_PASSWORD`. The app and bridge log in with that password at
+startup (`POST /v1/auth/login`, see each service's `bin/aidb-login.mjs`)
+to obtain the token — nothing is baked into an image. To swap the
+simulated upstream for a real OpenC3 COSMOS feed, set `BRIDGE_SOURCE=cosmos`
+(see `apps/aerospace-rca/docs/REAL-TELEMETRY.md`).
+
+The manual / bare-metal path below remains available if you'd rather run
+the engine and apps yourself.
+
+---
+
 ## Prerequisites
 
 | | |
