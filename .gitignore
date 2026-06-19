@@ -1,8 +1,12 @@
 node_modules/
+.pnpm-store/
 .next/
 dist/
 *.tsbuildinfo
 .env
 .env.local
 .env.*.local
+.env.local.*
+*.bak-*
+*.bak
 var/
