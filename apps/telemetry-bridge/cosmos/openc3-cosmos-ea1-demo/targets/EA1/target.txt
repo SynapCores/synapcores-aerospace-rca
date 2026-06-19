@@ -1,0 +1,2 @@
+# EA-1 demo target. Simulated; no command set needed for the demo, but
+# COSMOS requires the target dir to exist with cmd_tlm definitions.

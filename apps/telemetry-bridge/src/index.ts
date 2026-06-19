@@ -21,6 +21,17 @@
  *   - DCU_AGGREGATE_PERIOD_MS (default 5000 — see honest tradeoff below)
  *   - DCU_BATCH_ROWS          (default 500)
  *   - DCU_PERSIST_AGGREGATES  (default 1 — set 0 to skip aggregate writes)
+ *   - BRIDGE_SOURCE           (default "mock"; "cosmos" also ingests from
+ *                              an OpenC3 COSMOS Streaming API — Track C)
+ *   - COSMOS_WS_URL           (cosmos source) e.g.
+ *                              ws://cosmos:2900/openc3-api/cable
+ *   - COSMOS_SCOPE            (cosmos source, default "DEFAULT")
+ *   - COSMOS_TOKEN            (cosmos source) COSMOS API password/token
+ *   - COSMOS_ITEM_MAP         (cosmos source, default ./config/cosmos-map.json)
+ *
+ * The /ingest WebSocket stays open in both modes — when BRIDGE_SOURCE=cosmos
+ * the COSMOS adapter feeds the SAME bridge.ingest() path, so the simulator
+ * and a real COSMOS stream can run side by side if desired.
  *
  * Why default AGGREGATE_PERIOD = 5000ms (= 0.2Hz):
  *   The spec offers 1Hz (3000 rows/s, ~270K rows over a 90s run) and
@@ -30,9 +41,11 @@
  *   absorbs it on the target box.
  */
 
+import { readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { Bridge } from './bridge.js';
+import { startCosmosAdapter, type CosmosAdapter, type CosmosItemMap } from './cosmos.js';
 import type {
   IngestBatchMessage,
   SubscribeMessage,
@@ -44,6 +57,7 @@ const KEY = process.env.SYNAPCORES_ADMIN_API_KEY;
 const AGG_MS = Number(process.env.DCU_AGGREGATE_PERIOD_MS ?? 5000);
 const BATCH = Number(process.env.DCU_BATCH_ROWS ?? 500);
 const PERSIST = process.env.DCU_PERSIST_AGGREGATES !== '0';
+const SOURCE = (process.env.BRIDGE_SOURCE ?? 'mock').toLowerCase();
 
 if (!KEY) {
   console.error('[telemetry-bridge] SYNAPCORES_ADMIN_API_KEY not set.');
@@ -58,10 +72,50 @@ const bridge = new Bridge({
   persistAggregates: PERSIST,
 });
 
+let cosmos: CosmosAdapter | null = null;
+
+/** Start the OpenC3 COSMOS adapter and feed its samples into the bridge. */
+function startCosmosSource(): CosmosAdapter {
+  const cableUrl = process.env.COSMOS_WS_URL;
+  const token = process.env.COSMOS_TOKEN ?? '';
+  const scope = process.env.COSMOS_SCOPE ?? 'DEFAULT';
+  const mapPath = process.env.COSMOS_ITEM_MAP ?? './config/cosmos-map.json';
+  if (!cableUrl) {
+    console.error(
+      '[telemetry-bridge] BRIDGE_SOURCE=cosmos but COSMOS_WS_URL is not set.',
+    );
+    process.exit(2);
+  }
+  let itemMap: CosmosItemMap;
+  try {
+    itemMap = JSON.parse(readFileSync(mapPath, 'utf8')) as CosmosItemMap;
+  } catch (e) {
+    console.error(
+      `[telemetry-bridge] failed to read COSMOS item map '${mapPath}': ${(e as Error).message}`,
+    );
+    process.exit(2);
+  }
+  const aliases = Object.keys(itemMap);
+  console.log(
+    `[telemetry-bridge] BRIDGE_SOURCE=cosmos — ${aliases.length} mapped items from ${mapPath}`,
+  );
+  return startCosmosAdapter({ cableUrl, scope, token, itemMap }, (samples, ts) => {
+    bridge.ingest({ type: 'samples', ts, samples });
+  });
+}
+
 async function main(): Promise<void> {
   const n = await bridge.loadRegistry();
   bridge.start();
   console.log(`[telemetry-bridge] loaded ${n} sensors from telemetry_sensors`);
+
+  if (SOURCE === 'cosmos') {
+    cosmos = startCosmosSource();
+  } else if (SOURCE !== 'mock') {
+    console.warn(
+      `[telemetry-bridge] unknown BRIDGE_SOURCE='${SOURCE}', falling back to mock`,
+    );
+  }
 
   const httpServer = createServer((req, res) => {
     if (req.method === 'GET' && req.url === '/health') {
@@ -106,6 +160,7 @@ async function main(): Promise<void> {
 
   const shutdown = (signal: string) => {
     console.log(`[telemetry-bridge] ${signal} — shutting down`);
+    cosmos?.stop();
     bridge.stop();
     wss.close();
     httpServer.close(() => process.exit(0));

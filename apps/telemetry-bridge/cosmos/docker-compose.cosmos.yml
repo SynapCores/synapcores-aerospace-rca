@@ -1,0 +1,39 @@
+# Track C overlay — point the telemetry-bridge at a real OpenC3 COSMOS
+# instead of the in-browser Web Worker mock.
+#
+#   docker compose -f docker-compose.yml -f cosmos/docker-compose.cosmos.yml up
+#
+# This file ONLY overrides the bridge's source. It does NOT start COSMOS:
+# COSMOS is its own multi-container compose project (redis/valkey, minio,
+# the operator/cmd-tlm-api services, traefik) and is brought up separately
+# with `openc3.sh run` from a COSMOS checkout. See cosmos/README.md.
+#
+# Two ways to reach COSMOS from the bridge:
+#   1. Same host — COSMOS's traefik publishes :2900. Use
+#      COSMOS_WS_URL=ws://host.docker.internal:2900/openc3-api/cable
+#   2. Shared docker network — attach this project to COSMOS's external
+#      network (openc3-cosmos-network) and use the service name:
+#      COSMOS_WS_URL=ws://openc3-traefik:2900/openc3-api/cable
+#
+# COSMOS_TOKEN is the COSMOS API password set on first login. The bundled
+# .env default is the OSS dev password; override it for any real deploy.
+
+services:
+  bridge:
+    environment:
+      - BRIDGE_SOURCE=cosmos
+      - COSMOS_WS_URL=${COSMOS_WS_URL:-ws://host.docker.internal:2900/openc3-api/cable}
+      - COSMOS_SCOPE=${COSMOS_SCOPE:-DEFAULT}
+      - COSMOS_TOKEN=${COSMOS_TOKEN:-password}
+      # config/cosmos-map.json ships in the image; override the path to
+      # mount a site-specific map without rebuilding.
+      - COSMOS_ITEM_MAP=${COSMOS_ITEM_MAP:-./config/cosmos-map.json}
+    extra_hosts:
+      # so option (1) above resolves on Linux engines
+      - "host.docker.internal:host-gateway"
+
+# Uncomment to use option (2) — join COSMOS's network by name.
+# networks:
+#   default:
+#     name: openc3-cosmos-network
+#     external: true

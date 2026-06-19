@@ -1,0 +1,20 @@
+# OpenC3 COSMOS plugin — EA-1 bearing-race demo target.
+#
+# Emits a simulated EA-1 turbopump + combustion-chamber telemetry stream
+# with a steady-state nominal profile followed by a bearing-race
+# micro-pitting fault. The telemetry-bridge (BRIDGE_SOURCE=cosmos)
+# subscribes to these items via the COSMOS Streaming API and runs the
+# same z-score / step / debounce detection it runs on the Web Worker mock.
+#
+# Build:   openc3.sh cli generate plugin (or `rake build` in this dir)
+# Install: upload the resulting .gem in the COSMOS Admin → Plugins tab,
+#          or `openc3cli load openc3-cosmos-ea1-demo-*.gem`.
+
+VARIABLE ea1_target_name EA1
+
+TARGET EA1 <%= ea1_target_name %>
+
+# A simulated target — no real hardware. The sim class lives in
+# targets/EA1/lib/ea1_sim.rb and drives the fault profile.
+INTERFACE <%= ea1_target_name %>_INT simulated_target_interface.rb Ea1Sim
+  MAP_TARGET <%= ea1_target_name %>

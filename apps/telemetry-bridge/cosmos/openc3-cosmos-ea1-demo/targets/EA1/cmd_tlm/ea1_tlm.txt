@@ -1,0 +1,32 @@
+# EA-1 turbopump + combustion-chamber telemetry.
+#
+# The items the telemetry-bridge maps (config/cosmos-map.json) are:
+#   EA1 TURBOPUMP VIBRATION_RMS  → sensor EA1-027-TP-VIB-X-014  (Act 2 spike)
+#   EA1 CHAMBER   VIBRATION_Y    → sensor EA1-027-CC-VIB-Y-022  (Act 5 cluster)
+# The remaining items are realistic context (bearing temp, shaft speed,
+# chamber pressure) so the stream reads like a real turbopump packet, not
+# two lonely floats.
+
+TELEMETRY EA1 TURBOPUMP BIG_ENDIAN "EA-1 turbopump telemetry packet"
+  APPEND_ID_ITEM PKT_ID        16 UINT 1   "Packet identifier"
+  APPEND_ITEM    TIMESEC       32 UINT      "Seconds since epoch"
+  APPEND_ITEM    TIMEUS        32 UINT      "Microseconds of second"
+  APPEND_ITEM    BEARING_TEMP_C 32 FLOAT    "Bearing race temperature"
+    UNITS Celsius C
+  APPEND_ITEM    VIBRATION_RMS 32 FLOAT     "Turbopump vibration RMS (X axis)"
+    UNITS Gees g
+  APPEND_ITEM    SHAFT_RPM     32 FLOAT     "Turbopump shaft speed"
+    UNITS RPM rpm
+  APPEND_ITEM    INLET_PSI     32 FLOAT     "LOX inlet pressure"
+    UNITS PSI psi
+
+TELEMETRY EA1 CHAMBER BIG_ENDIAN "EA-1 combustion-chamber telemetry packet"
+  APPEND_ID_ITEM PKT_ID        16 UINT 2   "Packet identifier"
+  APPEND_ITEM    TIMESEC       32 UINT      "Seconds since epoch"
+  APPEND_ITEM    TIMEUS        32 UINT      "Microseconds of second"
+  APPEND_ITEM    CHAMBER_PSI   32 FLOAT     "Combustion chamber pressure"
+    UNITS PSI psi
+  APPEND_ITEM    VIBRATION_Y   32 FLOAT     "Chamber-mount vibration RMS (Y axis)"
+    UNITS Gees g
+  APPEND_ITEM    THROAT_TEMP_C 32 FLOAT     "Throat temperature"
+    UNITS Celsius C
