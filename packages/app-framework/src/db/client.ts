@@ -87,7 +87,10 @@ export class SynapCoresClient {
   constructor(opts: SynapCoresClientOptions) {
     this.baseUrl = (opts.baseUrl ?? 'http://127.0.0.1:28080').replace(/\/+$/, '');
     this.apiKey = opts.apiKey;
-    this.timeoutMs = opts.timeoutMs ?? 60_000;
+    // 120s, matching the agent client. A first call against a cold engine
+    // pays for the embedding model's initial load; aborting at 60s turned
+    // that one-time warm-up into an opaque 500.
+    this.timeoutMs = opts.timeoutMs ?? 120_000;
     this.fetchImpl = opts.fetchImpl ?? fetch;
   }
 

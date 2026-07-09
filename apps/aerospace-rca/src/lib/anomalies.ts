@@ -48,15 +48,30 @@ export async function findSimilarAnomalies(
   id: string,
   k = 5,
 ): Promise<SimilarAnomaly[]> {
+  // The target embedding is fetched once and bound as a parameter.
+  //
+  // Inlining it as a scalar subquery in the projection —
+  // `COSINE_SIMILARITY(a.embedding, (SELECT embedding FROM anomalies WHERE id = $1))`
+  // — re-evaluates that subquery for every candidate row, turning a scan
+  // into an O(N^2) one. On the demo dataset that took >60s and tripped the
+  // client abort. The engine does not hoist a correlation-free scalar
+  // subquery out of the projection.
+  const target = await db().sql<{ embedding: number[] }>(
+    `SELECT embedding FROM anomalies WHERE id = $1 LIMIT 1`,
+    [id],
+  );
+  const embedding = target.rows[0]?.embedding;
+  if (!embedding) return [];
+
   const result = await db().sql<SimilarAnomaly>(
     `SELECT a.id, a.ts, a.program, a.subsystem, a.unit_id, a.severity, a.status,
             a.title, a.description, a.reporter, a.test_stand, a.source_doc,
-            COSINE_SIMILARITY(a.embedding, (SELECT embedding FROM anomalies WHERE id = $1)) AS similarity
+            COSINE_SIMILARITY(a.embedding, $1) AS similarity
        FROM anomalies a
       WHERE a.id <> $2
       ORDER BY similarity DESC
       LIMIT ${Math.min(Math.max(k, 1), 20)}`,
-    [id, id],
+    [embedding, id],
   );
   return result.rows.map((r) => ({
     ...r,
