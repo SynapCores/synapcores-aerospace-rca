@@ -1,5 +1,14 @@
 # aerospace-rca — SynapCores AIDB vertical demo
 
+![5-act cinematic playback of the RCA investigation](docs/media/demo.gif)
+
+> The `/demo` route above runs live against a real engine — every act is a real
+> query. One anomaly lands, vector recall surfaces near-identical past incidents,
+> a graph traversal fingerprints the shared supplier across programs, an
+> in-database agent surfaces the stale RFAs and a departed-employee owner, and an
+> immutable Merkle-chained evidence spine makes it audit-defensible. All five run
+> in a single engine. ([full-resolution still](docs/media/demo-complete.png))
+
 A complete reference implementation of an **aerospace anomaly Root Cause
 Analysis** application built on [SynapCores AIDB](https://github.com/SynapCores/synapcores).
 Demonstrates how to combine SQL, vector similarity, graph traversal,
