@@ -7,7 +7,7 @@
 > a graph traversal fingerprints the shared supplier across programs, an
 > in-database agent surfaces the stale RFAs and a departed-employee owner, and an
 > immutable Merkle-chained evidence spine makes it audit-defensible. All five run
-> in a single engine. ([full-resolution still](docs/media/demo-complete.png))
+> in a single engine. ([MP4](docs/media/demo.mp4) · [full-resolution still](docs/media/demo-complete.png))
 
 A complete reference implementation of an **aerospace anomaly Root Cause
 Analysis** application built on [SynapCores AIDB](https://github.com/SynapCores/synapcores).
