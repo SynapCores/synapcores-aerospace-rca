@@ -439,13 +439,13 @@ async function main() {
   if (sensors.length) {
     await seedSensors(sensors);
   }
-  await seedGraph(
-    anomalies.filter((a) => includeTodayInBulk || a.id !== TODAY_ANOMALY_ID),
-    parts,
-    suppliers,
-    cas,
-    rfas,
-  );
+  // The graph always includes the "today" anomaly's node + OCCURRED_ON edge,
+  // even under --hold-today. The graph models pre-existing part/supplier
+  // structure (the "memory" Act 3's fingerprint traverses); only the SQL row +
+  // embedding + evidence are held back for the live Act-1 ingest. Without the
+  // node here, `fingerprintForAnomaly` finds no anomaly→part→supplier path and
+  // Act 3 renders "No graph nodes returned".
+  await seedGraph(anomalies, parts, suppliers, cas, rfas);
   const evidenceSet = includeTodayInBulk
     ? anomalies
     : anomalies.filter((a) => a.id !== TODAY_ANOMALY_ID);

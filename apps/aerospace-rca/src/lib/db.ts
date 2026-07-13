@@ -44,10 +44,16 @@ export class AerospaceRcaClient {
   constructor(opts: { baseUrl: string; apiKey: string; timeoutMs?: number }) {
     const url = new URL(opts.baseUrl);
     const useHttps = url.protocol === 'https:';
+    // `opts.apiKey` actually carries a gateway JWT (minted by bin/aidb-login.mjs
+    // from the admin password), NOT an `ak_`/`aidb_` API key. The SDK's `apiKey`
+    // field rejects any value without that prefix; its `jwtToken` field sends
+    // the same `Authorization: Bearer <token>` header the engine accepts for
+    // JWTs (verified: Bearer <JWT> on /v1/query/execute succeeds; the engine
+    // exposes no API-key mint endpoint). Route the token to `jwtToken`.
     this.sdk = new SynapCores({
       host: url.hostname,
       port: Number(url.port) || (useHttps ? 443 : 80),
-      apiKey: opts.apiKey,
+      jwtToken: opts.apiKey,
       useHttps,
       timeout: opts.timeoutMs ?? 60_000,
     });

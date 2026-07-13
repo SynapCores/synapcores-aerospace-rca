@@ -63,6 +63,13 @@ export async function findSimilarAnomalies(
   const embedding = target.rows[0]?.embedding;
   if (!embedding) return [];
 
+  // The engine rejects array/object query parameters ("array/object parameters
+  // are not supported; pre-serialize as a string"), so bind the target vector
+  // as a vector-literal string (`[0.1,0.2,…]`). It is still bound ONCE and
+  // reused for every candidate row — keeping the single-evaluation win that
+  // avoids the O(N^2) scalar-subquery re-eval described above.
+  const embeddingParam = `[${embedding.join(',')}]`;
+
   const result = await db().sql<SimilarAnomaly>(
     `SELECT a.id, a.ts, a.program, a.subsystem, a.unit_id, a.severity, a.status,
             a.title, a.description, a.reporter, a.test_stand, a.source_doc,
@@ -71,7 +78,7 @@ export async function findSimilarAnomalies(
       WHERE a.id <> $2
       ORDER BY similarity DESC
       LIMIT ${Math.min(Math.max(k, 1), 20)}`,
-    [embedding, id],
+    [embeddingParam, id],
   );
   return result.rows.map((r) => ({
     ...r,
