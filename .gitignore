@@ -10,3 +10,6 @@ dist/
 *.bak-*
 *.bak
 var/
+
+# raw Playwright demo captures (transcoded to mp4)
+*.webm
