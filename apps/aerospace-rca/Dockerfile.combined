@@ -1,0 +1,77 @@
+# syntax=docker/dockerfile:1
+#
+# Aerospace RCA — SINGLE-IMAGE demo.
+#
+#   docker run -p 3005:3005 synapcores/aerospace-rca
+#
+# Engine, telemetry bridge and web app in one container, so trying the demo is
+# one command with no compose file, no .env and no keys to paste. For a
+# production-shaped deployment where the engine is upgraded independently, use
+# the three-service compose in the repo instead.
+#
+#   docker build -f apps/aerospace-rca/Dockerfile.allinone -t synapcores/aerospace-rca .
+
+# ---------- build the Next.js app + bridge deps ----------
+FROM node:22-slim AS build
+RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
+WORKDIR /app
+COPY . .
+RUN pnpm install --no-frozen-lockfile \
+ && pnpm --filter @synapcores/aerospace-rca build
+# The bridge is TypeScript executed by tsx, so it ships its own node_modules
+# rather than a compiled bundle.
+WORKDIR /app/apps/telemetry-bridge
+RUN npm install --no-audit --no-fund
+WORKDIR /app
+
+# ---------- runtime: the engine image, plus a node runtime ----------
+FROM synapcores/community:latest AS runtime
+
+# The community image is Ubuntu 22.04 with no node. Take the runtime from the
+# official node image rather than apt, to pin the same major version the app
+# was built against.
+COPY --from=node:22-slim /usr/local/bin/node /usr/local/bin/node
+COPY --from=node:22-slim /usr/local/lib/node_modules /usr/local/lib/node_modules
+
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
+ && rm -rf /var/lib/apt/lists/* \
+ && ln -sf /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm
+
+WORKDIR /srv
+# App: Next standalone bundle carries its own traced node_modules.
+COPY --from=build /app/apps/aerospace-rca/.next/standalone ./
+COPY --from=build /app/apps/aerospace-rca/.next/static ./apps/aerospace-rca/.next/static
+COPY --from=build /app/apps/aerospace-rca/bin ./apps/aerospace-rca/bin
+COPY --from=build /app/apps/aerospace-rca/src/lib ./apps/aerospace-rca/src/lib
+# Bridge: TypeScript run through tsx. Its dependencies are installed HERE
+# rather than copied from the build stage -- npm writes node_modules/.bin as
+# symlinks, and those arrive dangling after a cross-stage COPY, so tsx exists
+# on disk but will not execute.
+COPY --from=build /app/apps/telemetry-bridge/src ./apps/telemetry-bridge/src
+COPY --from=build /app/apps/telemetry-bridge/config ./apps/telemetry-bridge/config
+COPY --from=build /app/apps/telemetry-bridge/bin ./apps/telemetry-bridge/bin
+COPY --from=build /app/apps/telemetry-bridge/package.json ./apps/telemetry-bridge/
+# NOT --omit=dev: tsx is declared a devDependency but this service runs
+# through it, so a production-only install silently omits the interpreter.
+RUN cd /srv/apps/telemetry-bridge && npm install --no-audit --no-fund \
+ && test -x ./node_modules/.bin/tsx
+
+COPY apps/aerospace-rca/bin/allinone-entrypoint.sh /usr/local/bin/allinone
+RUN chmod +x /usr/local/bin/allinone && chown -R synapcores:synapcores /srv
+
+USER synapcores
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1 \
+    AIDB_ACCEPT_LICENSE=1 \
+    PORT=3005 \
+    SYNAPCORES_URL=http://127.0.0.1:8080 \
+    BRIDGE_SOURCE=mock
+
+# 3005 = the demo UI. 8080 is the engine, exposed only if you want to poke it.
+EXPOSE 3005 8080
+
+HEALTHCHECK --interval=15s --timeout=5s --start-period=120s --retries=8 \
+  CMD curl -fsS "http://127.0.0.1:${PORT}/" >/dev/null || exit 1
+
+ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/allinone"]
