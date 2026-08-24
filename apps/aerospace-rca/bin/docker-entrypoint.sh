@@ -17,4 +17,5 @@ echo "[entrypoint] seeding demo corpus (bulk, holding today's anomaly for the li
 node bin/seed-demo.mjs --bulk --hold-today
 
 echo "[entrypoint] starting Next.js on :3005"
-exec pnpm start
+# standalone bundle: pnpm/node_modules are not present in the runtime image
+exec node ../../apps/aerospace-rca/server.js

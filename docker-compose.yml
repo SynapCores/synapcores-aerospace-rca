@@ -20,6 +20,12 @@ name: aerospace-rca
 services:
   engine:
     image: synapcores/community:latest
+    # `:latest` alone does NOT keep you current: Docker only re-resolves a
+    # floating tag on an explicit pull, or when the image is absent. Once a
+    # host has pulled it, `compose up` reuses the cached image indefinitely --
+    # that is how a production box ran a 2-month-old engine while its compose
+    # file said `:latest`. pull_policy makes the tag mean what it looks like.
+    pull_policy: always
     environment:
       - AIDB_ACCEPT_LICENSE=1
       - AIDB_JWT_SECRET=${AIDB_JWT_SECRET:?set AIDB_JWT_SECRET in .env}
@@ -27,9 +33,14 @@ services:
     ports:
       - "8080:8080"   # the community image listens on 8080 inside the container
     volumes:
-      - aidb_data:/opt/synapcores/aidb_data   # persist demo data across `down`
+      # Mount the REAL data dir, not /opt/synapcores/aidb_data -- that path is a
+      # symlink inside the image, and mounting a volume over it makes the
+      # engine's model auto-pull fail with ENOENT on a fresh volume
+      # (paths resolve as /opt/synapcores/aidb_data/./models/blobs/...).
+      - aidb_data:/var/lib/synapcores   # persist demo data across `down`
 
   bridge:
+    image: ${AEROSPACE_BRIDGE_IMAGE:-ghcr.io/synapcores/aerospace-rca-bridge:latest}
     build:
       context: ./apps/telemetry-bridge
     depends_on:
@@ -44,6 +55,9 @@ services:
       - "4005:4005"     # browser connects here (ws://<host>:4005)
 
   app:
+    # Published image by default so `docker compose up` needs no build step.
+    # To build from source instead:  docker compose build app
+    image: ${AEROSPACE_APP_IMAGE:-ghcr.io/synapcores/aerospace-rca:latest}
     build:
       context: .
       dockerfile: apps/aerospace-rca/Dockerfile
