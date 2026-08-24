@@ -26,6 +26,27 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The compose file references BOTH images. Publishing only the app
+          # left `docker compose up -d` unable to pull the bridge, so the
+          # "ready to run" promise was false.
+          - name: app
+            context: .
+            dockerfile: apps/aerospace-rca/Dockerfile
+            ghcr: ghcr.io/synapcores/aerospace-rca
+            dhub: docker.io/synapcores/aerospace-rca
+            dhub_repo: synapcores/aerospace-rca
+            readme: apps/aerospace-rca/DOCKERHUB.md
+          - name: bridge
+            context: ./apps/telemetry-bridge
+            dockerfile: ./apps/telemetry-bridge/Dockerfile
+            ghcr: ghcr.io/synapcores/aerospace-rca-bridge
+            dhub: docker.io/synapcores/aerospace-rca-bridge
+            dhub_repo: synapcores/aerospace-rca-bridge
+            readme: apps/telemetry-bridge/DOCKERHUB.md
     steps:
       - uses: actions/checkout@v4
 
@@ -51,8 +72,8 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: |
-            ghcr.io/synapcores/aerospace-rca
-            docker.io/synapcores/aerospace-rca
+            ${{ matrix.ghcr }}
+            ${{ matrix.dhub }}
           tags: |
             type=ref,event=branch
             type=semver,pattern={{version}}
@@ -63,8 +84,8 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
-          context: .
-          file: apps/aerospace-rca/Dockerfile
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -84,8 +105,8 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-          repository: synapcores/aerospace-rca
-          readme-filepath: apps/aerospace-rca/DOCKERHUB.md
+          repository: ${{ matrix.dhub_repo }}
+          readme-filepath: ${{ matrix.readme }}
           short-description: ${{ github.event.repository.description }}
 
       - name: Smoke-test BOTH published registries

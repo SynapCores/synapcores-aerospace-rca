@@ -1,42 +1,84 @@
 # Aerospace RCA
 
-**Root-cause analysis demo for aerospace telemetry**, built on SynapCores AIDB: vector search over maintenance history, a graph of components and failure modes, an immutable audit trail, and agents that draft the analysis.
+**A working root-cause-analysis demo for aerospace telemetry.** An anomaly appears in live sensor data; the app finds comparable failures in maintenance history by meaning rather than keyword, walks the component-and-supplier graph to find what they share, drafts an analysis, and records every step in an audit trail you can replay.
 
-This image is the demo web application. It needs a SynapCores engine and the telemetry bridge alongside it; the compose file below wires all three up.
+Built on [SynapCores AIDB](https://hub.docker.com/r/synapcores/community) — vector search, graph traversal, immutable audit and agents in one engine, no glue services.
 
-## Quick start
+## Run it
+
+No clone, no build, no keys to paste. Save this as `docker-compose.yml`:
+
+```yaml
+name: aerospace-rca
+services:
+  engine:
+    image: synapcores/community:latest
+    pull_policy: always
+    environment:
+      - AIDB_ACCEPT_LICENSE=1
+      - AIDB_JWT_SECRET=demo-only-change-me-0123456789abcdefghij
+      - AIDB_ADMIN_PASSWORD=demo-only-change-me
+    volumes:
+      - aidb_data:/var/lib/synapcores
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+
+  bridge:
+    image: synapcores/aerospace-rca-bridge:latest
+    depends_on: [engine]
+    environment:
+      - SYNAPCORES_URL=http://engine:8080
+      - AIDB_ADMIN_PASSWORD=demo-only-change-me
+
+  app:
+    image: synapcores/aerospace-rca:latest
+    depends_on: [engine]
+    environment:
+      - SYNAPCORES_URL=http://engine:8080
+      - AIDB_ADMIN_PASSWORD=demo-only-change-me
+    ports:
+      - "3005:3005"
+
+volumes:
+  aidb_data:
+```
 
 ```bash
-git clone https://github.com/SynapCores/synapcores-aerospace-rca
-cd synapcores-aerospace-rca
-cp .env.example .env      # then set the two secrets
 docker compose up -d
 ```
 
-Open <http://localhost:3005/demo>.
+Then open **<http://localhost:3005/demo>**.
 
-## What the container does on start
+First boot takes a minute or so: the engine initialises, the app applies its schema and seeds ~44 anomalies, 29 parts, 15 suppliers and 3000 telemetry readings, then serves the demo. Re-running is safe — the seed resets itself.
 
-1. Logs in to the engine with the pinned admin password to mint a token — no token is baked into the image.
-2. Applies the domain schema (idempotent).
-3. Seeds the demo corpus, holding back the current anomaly so the live path has something to find.
-4. Starts the Next.js production server on port 3005.
+The secrets above are throwaway values for a local demo. Replace both before anyone else can reach it.
 
-## Environment
+## What you get
 
-| Variable | Required | Description |
+| | |
+|---|---|
+| `app` (port 3005) | the demo UI — anomaly feed, similarity search, graph explorer, drafted analyses |
+| `bridge` | generates telemetry and streams it into the engine |
+| `engine` | SynapCores AIDB — storage, vectors, graph, audit, agents |
+
+## Configuration
+
+| Variable | Default | Description |
 |---|---|---|
-| `SYNAPCORES_URL` | yes | Engine base URL, e.g. `http://engine:8080` |
-| `AIDB_ADMIN_PASSWORD` | yes | Admin password pinned on the engine; the app logs in with it |
-
-## Note on the engine volume
-
-Mount the engine's data volume at `/var/lib/synapcores`, **not** `/opt/synapcores/aidb_data`. The latter is a symlink inside the engine image, and mounting a volume over it makes model auto-pull fail with `ENOENT` on a fresh volume, which breaks embedding generation and the demo seed. The bundled compose file already does this correctly.
+| `SYNAPCORES_URL` | `http://engine:8080` | Where the engine lives |
+| `AIDB_ADMIN_PASSWORD` | — | Admin password pinned on the engine; the app exchanges it for a token at startup. No token is baked into this image. |
+| `BRIDGE_SOURCE` | `mock` | Telemetry source for the bridge |
+| `DCU_AGGREGATE_PERIOD_MS` | `5000` | Telemetry aggregation window |
 
 ## Tags
 
-`latest` tracks the default branch. Pulling `latest` once does not keep a host current — Docker only re-resolves a floating tag on an explicit `docker compose pull`, or set `pull_policy: always`.
+`latest` follows the default branch; version tags follow releases.
 
-## Source and licence
+Note that pulling `latest` once does not keep a host current — Docker re-resolves a floating tag only on an explicit `docker compose pull`. The compose above sets `pull_policy: always` on the engine so it tracks upstream.
 
-<https://github.com/SynapCores/synapcores-aerospace-rca> — Apache 2.0.
+## Source
+
+<https://github.com/SynapCores/synapcores-aerospace-rca> — Apache 2.0. Build from source with `docker compose build`.
