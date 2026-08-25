@@ -38,39 +38,69 @@ The two apps connect through SynapCores AIDB — the only shared state.
 
 ## Run it with Docker (one command)
 
-The fastest path — engine + bridge + app, fully wired:
+Everything — engine, telemetry bridge and app — is in a single image:
+
+```sh
+docker run -p 3005:3005 synapcores/aerospace-rca
+```
+
+Then open any of:
+
+| URL | What you'll see |
+|---|---|
+| http://localhost:3005/dashboard | counter cards: open anomalies, similar-pattern hits, RFAs > 90 days, evidence-chain integrity |
+| http://localhost:3005/anomalies | filterable DataTable of all 44 anomalies (by program, severity) |
+| http://localhost:3005/anomalies/ANM-2026-EA1-027 | the headline detail page — similar-past panel, supplier-fingerprint graph, agent findings, evidence trail |
+| http://localhost:3005/rfas | RFA backlog list with age + owner |
+| http://localhost:3005/audit | immutable evidence chain |
+| http://localhost:3005/demo | **5-act cinematic playback** — click *Kick Off* and watch the story land in ~70 s |
+| http://localhost:3005/dcu | **live telemetry** — click *Start Test* for 90 s of simulated 3 K-sensor stream with 4 planted anomalies; alerts auto-promote into the investigation table |
+
+Start with **/demo** for the narrated version, or **/dcu** to watch detection
+happen live.
+
+First boot takes under a minute: the engine starts, the schema is applied,
+and the demo seeds ~44 anomalies, 29 parts, 15 suppliers and 3000 telemetry
+readings. Then the UI is live and telemetry starts streaming.
+
+Data lives inside the container unless you give it a volume:
+
+```sh
+docker run -p 3005:3005 -v aero:/var/lib/synapcores synapcores/aerospace-rca
+```
+
+**How auth is wired:** credentials are generated fresh inside each container,
+so no image ships a known password and no token is baked in. The app and
+bridge exchange that password for a gateway token at startup
+(`POST /v1/auth/login`, see `bin/aidb-login.mjs`). Set `AIDB_ADMIN_PASSWORD`
+yourself only if you publish port 8080 and want to query the engine directly.
+
+To swap the simulated upstream for a real OpenC3 COSMOS feed, set
+`BRIDGE_SOURCE=cosmos` (see `apps/aerospace-rca/docs/REAL-TELEMETRY.md`).
+
+### Running the services separately
+
+The single image pins the engine version inside it, which is right for a demo
+and wrong for a deployment where the engine is operated and upgraded on its
+own. For that, this repo ships a three-service compose file:
 
 ```sh
 git clone git@github.com:SynapCores/synapcores-aerospace-rca.git
 cd synapcores-aerospace-rca
-
-cp .env.example .env
-# edit .env: set AIDB_JWT_SECRET (e.g. `openssl rand -base64 32`)
-#            and AIDB_ADMIN_PASSWORD
-
-docker compose up --build
+cp .env.example .env      # works as-is for a local run
+docker compose up -d
 ```
 
-First run pulls the engine image, builds the app + bridge, applies the
-schema, and seeds the corpus — give it a few minutes. Then open:
-
-- **http://localhost:3005/demo** — 5-act cinematic playback
-- **http://localhost:3005/dcu** — live telemetry detection
-
-**How auth is wired:** the engine mints an admin token on boot (signed
-with `AIDB_JWT_SECRET`) for the `admin` user, whose password you pin via
-`AIDB_ADMIN_PASSWORD`. The app and bridge log in with that password at
-startup (`POST /v1/auth/login`, see each service's `bin/aidb-login.mjs`)
-to obtain the token — nothing is baked into an image. To swap the
-simulated upstream for a real OpenC3 COSMOS feed, set `BRIDGE_SOURCE=cosmos`
-(see `apps/aerospace-rca/docs/REAL-TELEMETRY.md`).
-
-The manual / bare-metal path below remains available if you'd rather run
+The manual / bare-metal path below remains available if you would rather run
 the engine and apps yourself.
 
 ---
 
-## Prerequisites
+## Prerequisites (running from source)
+
+None of this is needed for the single `docker run` above — that image carries
+the engine and its model with it. This applies only if you run the app from
+source or operate the engine separately.
 
 | | |
 |---|---|
@@ -84,10 +114,13 @@ the engine and apps yourself.
 
 Easiest path — Docker:
 
+Host port 8081 maps to 8080 inside the container: the image listens on 8080,
+while this repo's scripts default `SYNAPCORES_URL` to `http://127.0.0.1:8081`.
+
 ```sh
 docker run -d --name aidb \
-  -p 8081:8081 \
-  -v $PWD/aidb-data:/data \
+  -p 8081:8080 \
+  -v aidb-data:/var/lib/synapcores \
   -e AIDB_JWT_SECRET="$(openssl rand -base64 32)" \
   -e AIDB_ACCEPT_LICENSE=1 \
   synapcores/community:latest
@@ -116,7 +149,12 @@ docker exec aidb synapcores pull all-minilm:latest
 
 ---
 
-## Quick start (clone → demo in ~3 minutes)
+---
+
+## Run from source (development)
+
+Use this if you are changing the app. To just see the demo, use the single
+`docker run` above.
 
 ```sh
 git clone git@github.com:SynapCores/synapcores-aerospace-rca.git
@@ -146,17 +184,7 @@ pnpm --filter @synapcores/telemetry-bridge dev    # → ws://localhost:4005
 pnpm --filter @synapcores/aerospace-rca dev       # → http://localhost:3005
 ```
 
-Then open one of:
-
-| URL | What you'll see |
-|---|---|
-| http://localhost:3005/dashboard | counter cards: open anomalies, similar-pattern hits, RFAs > 90 days, evidence-chain integrity |
-| http://localhost:3005/anomalies | filterable DataTable of all 44 anomalies (by program, severity) |
-| http://localhost:3005/anomalies/ANM-2026-EA1-027 | the headline detail page — similar-past panel, supplier-fingerprint graph, agent findings, evidence trail |
-| http://localhost:3005/rfas | RFA backlog list with age + owner |
-| http://localhost:3005/audit | immutable evidence chain |
-| http://localhost:3005/demo | **5-act cinematic playback** — click *Kick Off* and watch the story land in ~70 s |
-| http://localhost:3005/dcu | **live telemetry** — click *Start Test* for 90 s of simulated 3 K-sensor stream with 4 planted anomalies; alerts auto-promote into the investigation table |
+The same URLs listed above are served on http://localhost:3005.
 
 ---
 
